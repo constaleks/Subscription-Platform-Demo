@@ -1,0 +1,122 @@
+x-php: &php
+    build:
+        context: .
+        dockerfile: _docker/php/Dockerfile
+    volumes:
+        - ./backend:/var/www/backend
+    depends_on:
+        db:
+            condition: service_healthy
+    env_file:
+        - path: ./backend/.env
+          required: false
+    user: '${DOCKER_UID:-1000}:${DOCKER_GID:-1000}'
+
+services:
+    nginx:
+        image: nginx:1.28-alpine
+        volumes:
+            - ./backend:/var/www/backend
+            - ./_docker/nginx/conf.d/:/etc/nginx/conf.d/
+        ports:
+            - '8876:80'
+        depends_on:
+            - app
+        container_name: uptime_nginx
+
+    app:
+        <<: *php
+        container_name: uptime_app
+
+    reverb:
+        <<: *php
+        command: php artisan reverb:start --host=0.0.0.0 --port=8080
+        ports:
+            - '8080:8080'
+        container_name: uptime_reverb
+
+    db:
+        image: postgres:17-alpine
+        restart: always
+        volumes:
+            - uptime_db_data:/var/lib/postgresql/data
+        environment:
+            POSTGRES_DB: ${DB_DATABASE:-uptime}
+            POSTGRES_USER: ${DB_USERNAME:-uptime_user}
+            POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+        ports:
+            - '8101:5432'
+        container_name: uptime_db
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+    pgadmin:
+        image: dpage/pgadmin4:9
+        restart: always
+        volumes:
+            - uptime_pgadmin_data:/var/lib/pgadmin
+        ports:
+            - '8102:80'
+        environment:
+            PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+            PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-Admin1234%}
+        depends_on:
+            - db
+        container_name: uptime_pgadmin
+
+    node:
+        image: node:22-alpine
+        working_dir: /app
+        volumes:
+            - ./frontend:/app
+        ports:
+            - '5173:5173'
+        command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+        container_name: uptime_node
+        user: '${DOCKER_UID:-1000}:${DOCKER_GID:-1000}'
+
+    queue:
+        <<: *php
+        command:
+            - sh
+            - -c
+            - >
+              until [ -f vendor/autoload.php ]; do sleep 2; done;
+              exec php artisan queue:listen
+              --queue=checks-high,checks-low,notifications,default
+              --tries=3 --timeout=60
+        container_name: uptime_queue
+
+    scheduler:
+        <<: *php
+        command:
+            - sh
+            - -c
+            - >
+              until [ -f vendor/autoload.php ]; do sleep 2; done;
+              exec php artisan schedule:work
+        container_name: uptime_scheduler
+
+    mailpit:
+        image: axllent/mailpit:v1.27
+        ports:
+            - '${MAILPIT_PORT:-8025}:8025'
+        restart: unless-stopped
+        container_name: uptime_mailpit
+
+    stripe:
+        image: stripe/stripe-cli:v1.30.0
+        profiles: ['stripe']
+        environment:
+            STRIPE_API_KEY: ${STRIPE_SECRET:-}
+        command: listen --forward-to http://nginx/stripe/webhook
+        depends_on:
+            - nginx
+        container_name: uptime_stripe
+
+volumes:
+    uptime_db_data:
+    uptime_pgadmin_data:
