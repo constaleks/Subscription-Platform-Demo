@@ -11,6 +11,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Cashier\Billable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Enums\Plan;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token', 'stripe_id', 'pm_type', 'pm_last_four'])]
@@ -35,5 +36,10 @@ class User extends Authenticatable
     public function monitors(): HasMany
     {
         return $this->hasMany(Monitor::class);
+    }
+
+    public function plan(): Plan
+    {
+        return $this->subscribed('default') ? Plan::Pro : Plan::Free;
     }
 }

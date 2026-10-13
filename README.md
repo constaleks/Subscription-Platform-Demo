@@ -92,9 +92,9 @@ Use any future expiry date, any 3-digit CVC and any postal code.
 ## Roadmap
 
 - [x] Docker setup
-- [ ] Laravel + React scaffolding
-- [ ] Auth
-- [ ] Monitors CRUD + scheduled checks
+- [x] Laravel + React scaffolding
+- [~] Auth
+- [~] Monitors CRUD + scheduled checks
 - [ ] Incidents + notifications
 - [ ] Real-time updates (Reverb)
 - [ ] Stripe subscriptions (Cashier) + plan limits

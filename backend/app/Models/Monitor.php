@@ -55,21 +55,22 @@ class Monitor extends Model
     public function pause(PauseReason $reason): void
     {
         DB::transaction(function () use ($reason) {
-            $this->update([
+            // forceFill: these columns are intentionally not mass-assignable
+            $this->forceFill([
                 'is_active' => false,
                 'paused_reason' => $reason,
-            ]);
- 
+            ])->save();
+
             $this->openIncident()->update(['resolved_at' => now()]);
         });
     }
- 
+
     public function resume(): void
     {
-        $this->update([
+        $this->forceFill([
             'is_active' => true,
             'paused_reason' => null,
             'next_check_at' => now(),
-        ]);
+        ])->save();
     }
 }

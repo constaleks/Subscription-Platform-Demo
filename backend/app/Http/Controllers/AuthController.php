@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use App\Http\Resources\UserResource;
 
 class AuthController extends Controller
 {
@@ -25,7 +26,7 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
  
-        return response()->json($user, 201);
+        return UserResource::make($user)->response()->setStatusCode(201);
     }
  
     public function login(Request $request): JsonResponse
@@ -43,7 +44,7 @@ class AuthController extends Controller
  
         $request->session()->regenerate();
  
-        return response()->json(Auth::user());
+        return UserResource::make(Auth::user())->response();
     }
  
     public function logout(Request $request): Response
@@ -56,10 +57,8 @@ class AuthController extends Controller
         return response()->noContent();
     }
 
-    public function me(Request $request)
+    public function me(Request $request): JsonResponse
     {
-        return response()->json([
-            'user' => $request->user(),
-        ]);
+        return UserResource::make(Auth::user())->response();
     }
 }

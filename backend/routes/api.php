@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\MonitorController;
 
 Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
@@ -12,6 +13,10 @@ Route::prefix('v1')->group(function () {
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
+
+            Route::apiResource('monitors', MonitorController::class);
+            Route::post('monitors/{monitor}/pause', [MonitorController::class, 'pause']);
+            Route::post('monitors/{monitor}/resume', [MonitorController::class, 'resume']);
         });
     });
 });
