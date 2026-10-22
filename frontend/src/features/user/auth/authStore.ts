@@ -24,7 +24,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     register: async (payload) => {
         set({ isSubmitting: true, error: null });
         try {
-            const { user } = await authApi.register(payload);
+            const user = await authApi.register(payload);
             set({ user, status: 'authenticated', isSubmitting: false });
         } catch (err) {
             set({ status: 'unauthenticated', error: extractErrorMessage(err), isSubmitting: false });
@@ -35,7 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     login: async (payload) => {
         set({ isSubmitting: true, error: null });
         try {
-            const { user } = await authApi.login(payload);
+            const user = await authApi.login(payload);
             set({ user, status: 'authenticated', isSubmitting: false });
         } catch (err) {
             set({ status: 'unauthenticated', error: extractErrorMessage(err), isSubmitting: false });
@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     fetchCurrentUser: async () => {
         try {
-            const { user } = await authApi.fetchCurrentUser();
+            const user = await authApi.fetchCurrentUser();
             set({ user, status: 'authenticated' });
         } catch {
             set({ user: null, status: 'unauthenticated' });
