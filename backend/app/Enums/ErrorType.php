@@ -9,5 +9,6 @@ enum ErrorType: string
     case Connection = 'connection';
     case Tls = 'tls';
     case UnexpectedStatus = 'unexpected_status';
+    case Blocked = 'blocked';
     case Other = 'other';
 }

@@ -94,7 +94,7 @@ Use any future expiry date, any 3-digit CVC and any postal code.
 - [x] Docker setup
 - [x] Laravel + React scaffolding
 - [x] Auth
-- [ ] Monitors CRUD + scheduled checks
+- [x] Monitors CRUD + scheduled checks
 - [ ] Incidents + notifications
 - [ ] Real-time updates (Reverb)
 - [ ] Stripe subscriptions (Cashier) + plan limits
