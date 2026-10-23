@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     createColumnHelper,
     createPaginatedRowModel,
@@ -10,7 +10,7 @@ import {
     useTable,
     type SortingState,
 } from '@tanstack/react-table';
-import { ChevronLeftIcon, ChevronRightIcon, EllipsisVerticalIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, EllipsisVerticalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from 'lucide-react';
 
 import type { Monitor, MonitorStatus } from '@/types/models';
 import { Badge } from '@/components/ui/badge';
@@ -39,80 +39,120 @@ const statusStyles: Record<MonitorStatus, string> = {
     pending: 'bg-muted-foreground',
 };
 
-const columns = columnHelper.columns([
-    columnHelper.accessor('name', {
-        header: 'Name',
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
-    }),
-    columnHelper.accessor('url', {
-        header: 'URL',
-        cell: ({ row }) => (
-            <a
-                href={row.original.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block max-w-64 truncate text-muted-foreground hover:underline">
-                {row.original.url}
-            </a>
-        ),
-    }),
-    columnHelper.accessor('status', {
-        header: 'Status',
-        cell: ({ row }) => {
-            const { status, consecutive_failures } = row.original;
-            return (
-                <Badge variant="outline" className="gap-1.5 px-1.5 capitalize">
-                    <span className={`size-2 rounded-full ${statusStyles[status]}`} />
-                    {status}
-                    {status === 'down' && consecutive_failures > 1 && (
-                        <span className="text-muted-foreground">×{consecutive_failures}</span>
-                    )}
-                </Badge>
-            );
-        },
-    }),
-    columnHelper.accessor('is_active', {
-        header: 'Active',
-        cell: ({ row }) => {
-            const { is_active, paused_reason } = row.original;
-            if (is_active) {
-                return 'Active';
-            }
-            return <span className="text-muted-foreground">{paused_reason === 'plan_limit' ? 'Paused (plan limit)' : 'Paused'}</span>;
-        },
-    }),
-    columnHelper.accessor('interval_seconds', {
-        header: 'Interval',
-        cell: ({ row }) => formatInterval(row.original.interval_seconds),
-    }),
-    columnHelper.accessor('last_checked_at', {
-        header: 'Last check',
-        cell: ({ row }) => <DateCell value={row.original.last_checked_at} fallback="Never" />,
-    }),
-    columnHelper.accessor('next_check_at', {
-        header: 'Next check',
-        cell: ({ row }) => (row.original.is_active ? <DateCell value={row.original.next_check_at} /> : '—'),
-    }),
-    columnHelper.display({
-        id: 'actions',
-        cell: () => (
-            <DropdownMenu>
-                <DropdownMenuTrigger
-                    render={<Button variant="ghost" className="flex size-8 text-muted-foreground data-open:bg-muted" size="icon" />}>
-                    <EllipsisVerticalIcon />
-                    <span className="sr-only">Open menu</span>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-32">
-                    <DropdownMenuItem>Edit</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        ),
-    }),
-]);
+export interface MonitorActions {
+    onEdit: (monitor: Monitor) => void;
+    onDelete: (monitor: Monitor) => void;
+    onPause: (monitor: Monitor) => void;
+    onResume: (monitor: Monitor) => void;
+    canResume: boolean;
+    busyId: number | null;
+}
 
-export function DataTable({ data }: { data: Monitor[] }) {
+const createColumns = (actions: MonitorActions) =>
+    columnHelper.columns([
+        columnHelper.accessor('name', {
+            header: 'Name',
+            cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        }),
+        columnHelper.accessor('url', {
+            header: 'URL',
+            cell: ({ row }) => (
+                <a
+                    href={row.original.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block max-w-64 truncate text-muted-foreground hover:underline">
+                    {row.original.url}
+                </a>
+            ),
+        }),
+        columnHelper.accessor('status', {
+            header: 'Status',
+            cell: ({ row }) => {
+                const { status, consecutive_failures } = row.original;
+                return (
+                    <Badge variant="outline" className="gap-1.5 px-1.5 capitalize">
+                        <span className={`size-2 rounded-full ${statusStyles[status]}`} />
+                        {status}
+                        {status === 'down' && consecutive_failures > 1 && (
+                            <span className="text-muted-foreground">×{consecutive_failures}</span>
+                        )}
+                    </Badge>
+                );
+            },
+        }),
+        columnHelper.accessor('is_active', {
+            header: 'Active',
+            cell: ({ row }) => {
+                const { is_active, paused_reason } = row.original;
+                if (is_active) {
+                    return 'Active';
+                }
+                return <span className="text-muted-foreground">{paused_reason === 'plan_limit' ? 'Paused (plan limit)' : 'Paused'}</span>;
+            },
+        }),
+        columnHelper.accessor('interval_seconds', {
+            header: 'Interval',
+            cell: ({ row }) => formatInterval(row.original.interval_seconds),
+        }),
+        columnHelper.accessor('last_checked_at', {
+            header: 'Last check',
+            cell: ({ row }) => <DateCell value={row.original.last_checked_at} fallback="Never" />,
+        }),
+        columnHelper.accessor('next_check_at', {
+            header: 'Next check',
+            cell: ({ row }) => (row.original.is_active ? <DateCell value={row.original.next_check_at} /> : '—'),
+        }),
+        columnHelper.display({
+            id: 'actions',
+            cell: ({ row }) => {
+                const monitor = row.original;
+                const isBusy = actions.busyId === monitor.id;
+
+                return (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            className="cursor-pointer"
+                            disabled={isBusy}
+                            render={
+                                <Button variant="ghost" className="flex size-8 text-muted-foreground data-open:bg-muted" size="icon" />
+                            }>
+                            <EllipsisVerticalIcon />
+                            <span className="sr-only">Open menu</span>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            {monitor.is_active ? (
+                                <DropdownMenuItem className="cursor-pointer" onClick={() => actions.onPause(monitor)}>
+                                    <PauseIcon />
+                                    Pause
+                                </DropdownMenuItem>
+                            ) : (
+                                <DropdownMenuItem
+                                    className="cursor-pointer"
+                                    disabled={!actions.canResume}
+                                    onClick={() => actions.onResume(monitor)}>
+                                    <PlayIcon />
+                                    {actions.canResume ? 'Start' : 'Start (plan limit reached)'}
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem className="cursor-pointer" onClick={() => actions.onEdit(monitor)}>
+                                <PencilIcon />
+                                Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="cursor-pointer" variant="destructive" onClick={() => actions.onDelete(monitor)}>
+                                <Trash2Icon />
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                );
+            },
+        }),
+    ]);
+
+export function DataTable({ data, actions }: { data: Monitor[]; actions: MonitorActions }) {
+    const columns = useMemo(() => createColumns(actions), [actions]);
     const [sorting, setSorting] = useState<SortingState>([]);
     const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
 

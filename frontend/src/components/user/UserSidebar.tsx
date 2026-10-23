@@ -1,9 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { CommandIcon, LayoutDashboardIcon } from 'lucide-react';
+import { CommandIcon, LayoutDashboardIcon, LayersPlus, ChartNoAxesColumn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserMenu } from './UserMenu';
+import { Button } from '../ui/button';
 
-const navItems = [{ title: 'Dashboard', to: '/dashboard', icon: LayoutDashboardIcon }];
+const navItems = [
+    { title: 'Dashboard', to: '/dashboard', icon: LayoutDashboardIcon },
+    { title: 'Monitors', to: '/view', icon: ChartNoAxesColumn },
+];
 
 export function UserSidebar({ onNavigate }: { onNavigate?: () => void }) {
     return (
@@ -14,6 +18,11 @@ export function UserSidebar({ onNavigate }: { onNavigate?: () => void }) {
             </span>
 
             <nav className="flex flex-1 flex-col gap-1">
+                <Button className="justify-start cursor-pointer">
+                    <NavLink className="flex items-center gap-2 w-full" to="/create">
+                        <LayersPlus /> Quick create
+                    </NavLink>
+                </Button>
                 {navItems.map(({ title, to, icon: Icon }) => (
                     <NavLink
                         key={to}

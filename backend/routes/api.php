@@ -13,10 +13,12 @@ Route::prefix('v1')->group(function () {
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
-
-            Route::apiResource('monitors', MonitorController::class);
-            Route::post('monitors/{monitor}/pause', [MonitorController::class, 'pause']);
-            Route::post('monitors/{monitor}/resume', [MonitorController::class, 'resume']);
         });
+    });
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::apiResource('monitors', MonitorController::class);
+        Route::post('monitors/{monitor}/pause', [MonitorController::class, 'pause']);
+        Route::post('monitors/{monitor}/resume', [MonitorController::class, 'resume']);
     });
 });
