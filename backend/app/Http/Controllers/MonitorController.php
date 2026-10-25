@@ -26,6 +26,8 @@ class MonitorController extends Controller
         $monitor = $request->user()->monitors()->make($request->validated());
         $monitor->next_check_at = now();
         $monitor->save();
+
+        $monitor->refresh();
  
         return MonitorResource::make($monitor)->response()->setStatusCode(201);
     }

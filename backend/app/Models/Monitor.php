@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Database\Factories\MonitorFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use App\Enums\HttpMethod;
@@ -15,6 +17,9 @@ use Illuminate\Support\Facades\DB;
 #[Fillable(['name', 'url', 'method', 'expected_status_code', 'request_headers', 'interval_seconds', 'timeout_seconds'])]
 class Monitor extends Model
 {
+    /** @use HasFactory<MonitorFactory> */
+    use HasFactory;
+
     protected function casts(): array
     {
         return [
