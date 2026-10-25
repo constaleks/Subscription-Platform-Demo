@@ -71,6 +71,8 @@ class Monitor extends Model
             'is_active' => true,
             'paused_reason' => null,
             'next_check_at' => now(),
+            'status' => MonitorStatus::Pending,
+            'consecutive_failures' => 0,
         ])->save();
     }
 }

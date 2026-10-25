@@ -11,6 +11,11 @@ use App\Models\MonitorCheck;
 use App\Support\CheckResult;
 use Illuminate\Support\Carbon;
 use App\Enums\MonitorStatus;
+use App\Services\IncidentManager;
+use App\Notifications\IncidentOpened;
+use App\Notifications\IncidentResolved;
+use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\DB;
 
 class CheckMonitorJob implements ShouldQueue
 {
@@ -45,7 +50,7 @@ class CheckMonitorJob implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(MonitorChecker $checker): void
+    public function handle(MonitorChecker $checker, IncidentManager $incidents): void
     {
         // The model is reloaded from the DB when the job runs. It may have been paused meanwhile.
         if (! $this->monitor->is_active) {
@@ -54,37 +59,68 @@ class CheckMonitorJob implements ShouldQueue
  
         $checkedAt = now();
         $result = $checker->check($this->monitor);
- 
-        MonitorCheck::create([
-            'monitor_id' => $this->monitor->id,
-            'is_up' => $result->isUp,
-            'http_status_code' => $result->httpStatusCode,
-            'response_time_ms' => $result->responseTimeMs,
-            'error_type' => $result->errorType,
-            'error_message' => $result->errorMessage,
-            'checked_at' => $checkedAt,
-        ]);
- 
-        $this->updateMonitor($result, $checkedAt);
+
+        $this->recordResult($result, $checkedAt, $incidents);
     }
 
-    private function updateMonitor(CheckResult $result, Carbon $checkedAt): void
+    private function recordResult(CheckResult $result, Carbon $checkedAt, IncidentManager $incidents): void
     {
-        $monitor = $this->monitor;
-        $monitor->last_checked_at = $checkedAt;
- 
-        if ($result->isUp) {
-            $monitor->consecutive_failures = 0;
-            $monitor->status = MonitorStatus::Up;
-        } else {
-            $monitor->consecutive_failures++;
- 
-            // One failed check may be a blip: only flip to "down" after N in a row
-            if ($monitor->consecutive_failures >= config('monitoring.failure_threshold')) {
-                $monitor->status = MonitorStatus::Down;
+        // Check row, state change and incident row are saved together or not at all
+        $notification = DB::transaction(function () use ($result, $checkedAt, $incidents): ?Notification {
+            // The HTTP request may have taken up to a minute, so the copy loaded at job start can be stale.
+            // The row lock serializes with pause()/resume() (their UPDATE takes the same lock),
+            // so the state below is always computed from the latest row.
+            $monitor = Monitor::lockForUpdate()->find($this->monitor->id);
+
+            // Paused (or deleted) while the request was in flight: discard the result
+            if (! $monitor?->is_active) {
+                return null;
             }
-        }
+
+            $check = MonitorCheck::create([
+                'monitor_id' => $monitor->id,
+                'is_up' => $result->isUp,
+                'http_status_code' => $result->httpStatusCode,
+                'response_time_ms' => $result->responseTimeMs,
+                'error_type' => $result->errorType,
+                'error_message' => $result->errorMessage,
+                'checked_at' => $checkedAt,
+            ]);
+
+            $previous = $monitor->status;
+
+            $monitor->last_checked_at = $check->checked_at;
+
+            if ($check->is_up) {
+                $monitor->consecutive_failures = 0;
+                $monitor->status = MonitorStatus::Up;
+            } else {
+                $monitor->consecutive_failures++;
+
+                // One failed check may be a blip: only flip to "down" after N in a row
+                if ($monitor->consecutive_failures >= config('monitoring.failure_threshold')) {
+                    $monitor->status = MonitorStatus::Down;
+                }
+            }
+
+            $monitor->save();
+
+            if ($previous !== MonitorStatus::Down && $monitor->status === MonitorStatus::Down) {
+                return new IncidentOpened($incidents->open($monitor));
+            }
  
-        $monitor->save(); // only dirty columns are written, so a concurrent pause isn't overwritten
+            if ($previous === MonitorStatus::Down && $monitor->status === MonitorStatus::Up) {
+                $incident = $incidents->resolve($monitor, $check->checked_at);
+ 
+                return $incident ? new IncidentResolved($incident) : null;
+            }
+ 
+            return null;
+        });
+ 
+        // Outside the transaction, so the queued notification can always find the committed incident row
+        if ($notification) {
+            $this->monitor->user->notify($notification);
+        }
     }
 }

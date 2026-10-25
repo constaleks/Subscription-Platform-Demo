@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use App\Enums\ErrorType;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Carbon\CarbonInterval;
 
 #[Fillable(['monitor_id', 'started_at', 'resolved_at', 'error_type', 'error_message', 'down_notified_at', 'recovery_notified_at'])]
 class Incident extends Model
@@ -32,5 +33,14 @@ class Incident extends Model
     public function scopeOpen(Builder $query): Builder
     {
         return $query->whereNull('resolved_at');
+    }
+
+    /** "5m 10s" or "2h 3m" for an open incident, the time since it started */
+    public function durationForHumans(): string
+    {
+        $end = $this->resolved_at ?? now();
+        $seconds = (int) abs($end->diffInSeconds($this->started_at));
+ 
+        return CarbonInterval::seconds($seconds)->cascade()->forHumans(['parts' => 2, 'short' => true]);
     }
 }
