@@ -35,12 +35,17 @@ class Incident extends Model
         return $query->whereNull('resolved_at');
     }
 
+    /** Seconds from start to resolution; for an open incident, until now */
+    public function durationSeconds(): int
+    {
+        $end = $this->resolved_at ?? now();
+
+        return (int) abs($end->diffInSeconds($this->started_at));
+    }
+
     /** "5m 10s" or "2h 3m" for an open incident, the time since it started */
     public function durationForHumans(): string
     {
-        $end = $this->resolved_at ?? now();
-        $seconds = (int) abs($end->diffInSeconds($this->started_at));
- 
-        return CarbonInterval::seconds($seconds)->cascade()->forHumans(['parts' => 2, 'short' => true]);
+        return CarbonInterval::seconds($this->durationSeconds())->cascade()->forHumans(['parts' => 2, 'short' => true]);
     }
 }
