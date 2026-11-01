@@ -16,6 +16,7 @@ use App\Notifications\IncidentOpened;
 use App\Notifications\IncidentResolved;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
+use App\Events\MonitorChecked;
 
 class CheckMonitorJob implements ShouldQueue
 {
@@ -66,7 +67,7 @@ class CheckMonitorJob implements ShouldQueue
     private function recordResult(CheckResult $result, Carbon $checkedAt, IncidentManager $incidents): void
     {
         // Check row, state change and incident row are saved together or not at all
-        $notification = DB::transaction(function () use ($result, $checkedAt, $incidents): ?Notification {
+        $outcome  = DB::transaction(function () use ($result, $checkedAt, $incidents): ?array {
             // The HTTP request may have taken up to a minute, so the copy loaded at job start can be stale.
             // The row lock serializes with pause()/resume() (their UPDATE takes the same lock),
             // so the state below is always computed from the latest row.
@@ -105,22 +106,37 @@ class CheckMonitorJob implements ShouldQueue
 
             $monitor->save();
 
-            if ($previous !== MonitorStatus::Down && $monitor->status === MonitorStatus::Down) {
-                return new IncidentOpened($incidents->open($monitor));
-            }
- 
-            if ($previous === MonitorStatus::Down && $monitor->status === MonitorStatus::Up) {
-                $incident = $incidents->resolve($monitor, $check->checked_at);
- 
-                return $incident ? new IncidentResolved($incident) : null;
-            }
- 
-            return null;
+            return [$monitor, $check, $this->notificationFor($previous, $monitor, $check, $incidents)];
         });
+
+        // Paused or deleted while the request was in flight: nothing was recorded
+        if ($outcome === null) {
+            return;
+        }
+
+        [$monitor, $check, $notification] = $outcome;
+
+        // Outside the transaction, so the queued broadcast and notification can always find the committed rows
+        MonitorChecked::dispatch($monitor, $check);
  
-        // Outside the transaction, so the queued notification can always find the committed incident row
         if ($notification) {
             $this->monitor->user->notify($notification);
         }
+    }
+
+    /** Opens or resolves the incident on a status change. Runs inside the transaction. */
+    private function notificationFor(MonitorStatus $previous, Monitor $monitor, MonitorCheck $check, IncidentManager $incidents): ?Notification
+    {
+        if ($previous !== MonitorStatus::Down && $monitor->status === MonitorStatus::Down) {
+            return new IncidentOpened($incidents->open($monitor));
+        }
+
+        if ($previous === MonitorStatus::Down && $monitor->status === MonitorStatus::Up) {
+            $incident = $incidents->resolve($monitor, $check->checked_at);
+
+            return $incident ? new IncidentResolved($incident) : null;
+        }
+
+        return null;
     }
 }
